@@ -7,6 +7,7 @@ import java.awt.Dimension;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.util.ArrayList;
@@ -17,7 +18,8 @@ import main.entities.Player;
 
 public class Connection implements FromUIListener {
 	private ArrayList<ToUIListener> uiListeners;
-	private DataInputStream dis;
+	private ObjectOutputStream oos;
+	private ObjectInputStream ois;
 	private Socket socket;
 	private Player player;
 	
@@ -27,19 +29,18 @@ public class Connection implements FromUIListener {
 		player = new Player();
 		uiListeners = new ArrayList<ToUIListener>();
 		connect();
-
 	}
 	
 	
 	public void addToUIListener(ToUIListener toUI) {
 		uiListeners.add(toUI);
-		System.out.println("Connection.addToUIListener() added : "+toUI);
 	}
 	
 	
 	// Conecta al servidor
 	public void connect() throws IOException {
 		socket = new Socket(Items.LOCALHOST, Items.PORT);			
+		System.out.println("Connection.connect() connected to : "+socket.getPort());
 	}
 	
 	
@@ -53,9 +54,6 @@ public class Connection implements FromUIListener {
 				oos = new ObjectOutputStream(socket.getOutputStream());
 				oos.writeObject(player);
 				
-				// Debug
-				System.out.println("Client.sendPlayer() player sended "+player);
-				
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
@@ -67,17 +65,15 @@ public class Connection implements FromUIListener {
 	
 	// Hace una peticion al servidor y recibe la confirmacion
 	private boolean sendRequest(int request) {
-		DataOutputStream dos = null;
-		dis = null;
 		boolean conf = false;
 		
 		try {
-			dos = new DataOutputStream(socket.getOutputStream());
-			dis = new DataInputStream(socket.getInputStream());
-			
-			dos.writeInt(request);
+			oos = new ObjectOutputStream(socket.getOutputStream());
+			oos.writeObject(request);
 
-			int confirmation = dis.readInt();
+			ois = new ObjectInputStream(socket.getInputStream());
+			int confirmation = (int) ois.readObject();
+			System.out.println("Connection.sendRequest() conf code : "+confirmation);
 			conf = (confirmation == Protocol.ACCEPT) ? true : false;
 			
 		} catch(Exception e) {
@@ -90,17 +86,19 @@ public class Connection implements FromUIListener {
 	
 	// Espera a que el servidor le mande posiciones del objeto
 	private void waitServer() {
-		int currentElement = 0;
 		try {
-			System.out.println("Client.waitServer() waiting for server");
-			while(currentElement != 999999999) {
-				int x = dis.readInt();
-				int y = dis.readInt();
-				sendMoveToUI(x, y);
-				System.out.println("Client.waitServer() "+x+" y "+y);
+			ois = new ObjectInputStream(socket.getInputStream());
+			while(true) {
+			int x = (int) ois.readObject();
+			int y = (int) ois.readObject();
+			System.out.println("Connection.waitServer() "+x+" "+y);
+			sendMoveToUI(x, y);
 			}
 		
 		} catch (IOException e) {
+			e.printStackTrace();
+			
+		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		}
 	}
@@ -108,7 +106,6 @@ public class Connection implements FromUIListener {
 
 	// Manda el movimiento recibido del servido al cliente grafico
 	public void sendMoveToUI(int x, int y) {
-		System.out.println("Connection.sendMoveToUI() sending : "+uiListeners.size());
 		
 		for(ToUIListener toUI : uiListeners)
 			toUI.move(x, y);
@@ -117,7 +114,6 @@ public class Connection implements FromUIListener {
 
 	@Override
 	public void onReady(Dimension dim, String name, ToUIListener toUI) {
-		System.out.println("Connection.onReady() notified ready");
 		addToUIListener(toUI);
 		start(dim, name);
 	}
