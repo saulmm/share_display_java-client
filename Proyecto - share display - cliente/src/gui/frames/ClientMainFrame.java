@@ -20,7 +20,7 @@ public class ClientMainFrame extends JFrame {
 	private CoolPane pane;
 	private String name;
 	
-	
+	// Testing the repo
 	public ClientMainFrame(FromUIListener from) {
 		initProperties();
 		initComponents();
