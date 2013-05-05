@@ -4,8 +4,6 @@ import gui.listeners.FromUIListener;
 import gui.listeners.ToUIListener;
 
 import java.awt.Dimension;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -16,8 +14,12 @@ import main.Items;
 import main.Protocol;
 import main.entities.Player;
 
-public class Connection implements FromUIListener {
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+public class Connection implements FromUIListener, Runnable {
 	private ArrayList<ToUIListener> uiListeners;
+	private final Logger log = LoggerFactory.getLogger(Connection.class);
 	private ObjectOutputStream oos;
 	private ObjectInputStream ois;
 	private Socket socket;
@@ -28,7 +30,8 @@ public class Connection implements FromUIListener {
 	public Connection() throws IOException {
 		player = new Player();
 		uiListeners = new ArrayList<ToUIListener>();
-		connect();
+		Thread connectionThread = new Thread(this);
+		connectionThread.start();
 	}
 	
 	
@@ -40,19 +43,18 @@ public class Connection implements FromUIListener {
 	// Conecta al servidor
 	public void connect() throws IOException {
 		socket = new Socket(Items.LOCALHOST, Items.PORT);			
-		System.out.println("Connection.connect() connected to : "+socket.getPort());
 	}
 	
 	
 	// Manda el jugador al servidor
 	private void sendPlayer() {
 		boolean conf = sendRequest(Protocol.PLAYER_REQUEST);
-		ObjectOutputStream oos = null;
 		
 		if(conf) {
 			try {
 				oos = new ObjectOutputStream(socket.getOutputStream());
 				oos.writeObject(player);
+				log.info("Player sent : "+player.toString());
 				
 			} catch (IOException e) {
 				e.printStackTrace();
@@ -66,15 +68,17 @@ public class Connection implements FromUIListener {
 	// Hace una peticion al servidor y recibe la confirmacion
 	private boolean sendRequest(int request) {
 		boolean conf = false;
-		
 		try {
 			oos = new ObjectOutputStream(socket.getOutputStream());
 			oos.writeObject(request);
 
-			ois = new ObjectInputStream(socket.getInputStream());
-			int confirmation = (int) ois.readObject();
-			System.out.println("Connection.sendRequest() conf code : "+confirmation);
+			if(ois == null)
+				ois = new ObjectInputStream(socket.getInputStream());
+			
+			int confirmation = (Integer) ois.readObject();
 			conf = (confirmation == Protocol.ACCEPT) ? true : false;
+			log.info("Confirmation : "+conf);
+			
 			
 		} catch(Exception e) {
 			e.printStackTrace();
@@ -87,11 +91,10 @@ public class Connection implements FromUIListener {
 	// Espera a que el servidor le mande posiciones del objeto
 	private void waitServer() {
 		try {
-			ois = new ObjectInputStream(socket.getInputStream());
 			while(true) {
-			int x = (int) ois.readObject();
-			int y = (int) ois.readObject();
-			System.out.println("Connection.waitServer() "+x+" "+y);
+			int x = (Integer) ois.readObject();
+			int y = (Integer) ois.readObject();
+			log.info("Point received : x : "+x+" y : "+y);
 			sendMoveToUI(x, y);
 			}
 		
@@ -124,6 +127,17 @@ public class Connection implements FromUIListener {
 		player.setDimension(dim);
 		player.setName(name);
 		sendPlayer();
+	}
+
+
+	@Override
+	public void run() {
+		try {
+			connect();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
 	}
 	
 }
